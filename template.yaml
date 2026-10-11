@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  recordatorios-diferidos
+
+  Sample SAM Template for recordatorios-diferidos
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
+    LoggingConfig:
+      LogFormat: JSON
+Resources:
+  RemindersDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: RemindersDLQ
+
+  RemindersQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: RemindersQueue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RemindersDLQ.Arn
+        maxReceiveCount: 3
+
+  SchedulerToSqsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowSendToQueue
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt RemindersQueue.Arn
+
+  RemindersProductionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: RemindersProductionTable
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH 
+          
+  CreateReminderFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: functions/create-reminder/
+      Handler: app.handler
+      Runtime: nodejs22.x
+      Architectures:
+      - x86_64
+      Environment:
+        # Sobreescrito localmente via local-env.json (sam local invoke)
+        Variables:
+          TABLE_NAME: !Ref RemindersProductionTable
+          AWS_ENDPOINT_URL_DYNAMODB: ""
+          QUEUE_ARN: !GetAtt RemindersQueue.Arn
+          SCHEDULER_ROLE_ARN: !GetAtt SchedulerToSqsRole.Arn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RemindersProductionTable
+        - Statement:
+            - Effect: Allow
+              Action: scheduler:CreateSchedule
+              Resource: "*"
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !GetAtt SchedulerToSqsRole.Arn
+      Events:
+        CreateReminder:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /reminders
+            Method: post
+  
+  SendReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/send-reminder/
+      Handler: app.handler
+      Runtime: nodejs22.x
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref RemindersProductionTable
+          SES_SENDER_EMAIL: "pricedtuna@gmail.com"
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RemindersProductionTable
+        - SESCrudPolicy:
+            IdentityName: "pricedtuna@gmail.com"
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt RemindersQueue.Arn
+            BatchSize: 1
+
+  GetReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/get-reminder/
+      Handler: app.handler
+      Runtime: nodejs22.x
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref RemindersProductionTable
+          AWS_ENDPOINT_URL_DYNAMODB: ""
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RemindersProductionTable
+      Events:
+        GetReminder:
+          Type: Api
+          Properties:
+            Path: /reminders/{id}
+            Method: get
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  CreateReminderApi:
+    Description: API Gateway endpoint URL for Prod stage for Create Reminder 
+      function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod/reminders/"
+  CreateReminderFunction:
+    Description: Create Reminder Lambda Function ARN
+    Value: !GetAtt CreateReminderFunction.Arn
+  CreateReminderFunctionIamRole:
+    Description: Implicit IAM Role created for Create Reminder function
+    Value: !GetAtt CreateReminderFunctionRole.Arn
