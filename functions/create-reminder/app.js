@@ -32,7 +32,7 @@ exports.handler = async (event) => {
     })
   );
 
-  await SchedulerClient.send(
+  await schedulerClient.send(
     new CreateScheduleCommand({
       Name: `reminder-${reminder.id}`,
       ScheduleExpression: `at(${reminder.scheduledAt.slice(0, 19)})`, // Recibe en formato yyyy-mm-ddThh:mm:ss

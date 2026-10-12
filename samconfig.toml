@@ -4,6 +4,7 @@ version = 0.1
 
 [default.global.parameters]
 stack_name = "recordatorios-diferidos"
+region = "us-east-2"
 
 [default.build.parameters]
 cached = true
@@ -16,6 +17,10 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
+s3_prefix = "recordatorios-diferidos"
+region = "us-east-2"
+disable_rollback = true
+image_repositories = []
 
 [default.package.parameters]
 resolve_s3 = true
