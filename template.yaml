@@ -73,6 +73,7 @@ Resources:
           AWS_ENDPOINT_URL_DYNAMODB: ""
           QUEUE_ARN: !GetAtt RemindersQueue.Arn
           SCHEDULER_ROLE_ARN: !GetAtt SchedulerToSqsRole.Arn
+          DEFAULT_TIMEZONE: "America/Phoenix"
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RemindersProductionTable
@@ -105,8 +106,12 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RemindersProductionTable
-        - SESCrudPolicy:
-            IdentityName: "pricedtuna@gmail.com"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
       Events:
         SQSEvent:
           Type: SQS
