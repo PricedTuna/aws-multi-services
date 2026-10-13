@@ -4,6 +4,10 @@ A serverless AWS application: a user creates a reminder with a message and a fut
 
 Infrastructure as code with **AWS SAM** (`template.yaml`), Node.js 22.
 
+## Demo
+
+![Demo](demo.gif)
+
 ## Architecture
 
 ```mermaid
